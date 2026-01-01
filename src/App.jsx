@@ -27,8 +27,7 @@ import {
   Hash,
   Clock,
   Cloud,
-  CloudOff,
-  Loader2
+  CloudOff
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -67,14 +66,14 @@ const parseDate = (input) => {
 };
 
 const getStatus = (endDateStr) => {
-  if (!endDateStr) return { status: 'Active', days: 99, color: 'text-green-600 bg-green-50', icon: <CheckCircle size={16}/> };
+  if (!endDateStr) return { status: 'N/A', days: 0, color: 'text-slate-400 bg-slate-100', icon: <Minus size={16}/> };
   
   const end = parseDate(endDateStr);
   const now = new Date();
   now.setHours(0,0,0,0);
   end.setHours(0,0,0,0);
   
-  const diffTime = end.getTime() - now.getTime();
+  const diffTime = end - now;
   const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
   if (days < 0) return { status: 'Expired', days, color: 'text-red-600 bg-red-50', icon: <XCircle size={16}/> };
@@ -82,22 +81,19 @@ const getStatus = (endDateStr) => {
   return { status: 'Active', days, color: 'text-green-600 bg-green-50', icon: <CheckCircle size={16}/> };
 };
 
-// PNG Invoice Generator (Native Canvas)
+// PNG Invoice Generator
 const downloadInvoicePNG = (user) => {
   const canvas = document.createElement('canvas');
   canvas.width = 800;
   canvas.height = 600;
   const ctx = canvas.getContext('2d');
 
-  // Background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Header Background
-  ctx.fillStyle = '#4F46E5'; // Indigo-600
+  ctx.fillStyle = '#4F46E5'; 
   ctx.fillRect(0, 0, canvas.width, 120);
   
-  // Header Text
   ctx.fillStyle = 'white';
   ctx.font = 'bold 36px sans-serif';
   ctx.fillText('INVOICE', 50, 75);
@@ -111,24 +107,23 @@ const downloadInvoicePNG = (user) => {
   ctx.fillStyle = '#e0e7ff';
   ctx.fillText('Subscription Services', 750, 95);
 
-  // Reset Align
   ctx.textAlign = 'left';
-
-  // Bill To Section
-  ctx.fillStyle = '#64748b'; // Slate-500
+  ctx.fillStyle = '#64748b'; 
   ctx.font = 'bold 14px sans-serif';
   ctx.fillText('BILL TO', 50, 180);
   
-  ctx.fillStyle = '#1e293b'; // Slate-800
+  // Handle custom sheet user display
+  const name = user.username || (Object.keys(user).find(k => k !== 'id') ? user[Object.keys(user).find(k => k !== 'id')] : 'Valued Customer');
+
+  ctx.fillStyle = '#1e293b'; 
   ctx.font = 'bold 24px sans-serif';
-  ctx.fillText(user.username || 'Valued Customer', 50, 210);
+  ctx.fillText(name, 50, 210);
   
   ctx.fillStyle = '#475569';
   ctx.font = '16px sans-serif';
-  ctx.fillText(`Discord: ${user.discordId || '-'}`, 50, 235);
-  ctx.fillText(`TxID: ${user.txid || '-'}`, 50, 260);
+  if(user.discordId) ctx.fillText(`Discord: ${user.discordId}`, 50, 235);
+  if(user.txid) ctx.fillText(`TxID: ${user.txid}`, 50, 260);
 
-  // Divider
   ctx.beginPath();
   ctx.moveTo(50, 300);
   ctx.lineTo(750, 300);
@@ -136,52 +131,48 @@ const downloadInvoicePNG = (user) => {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Table Headers
   ctx.fillStyle = '#94a3b8';
   ctx.font = 'bold 14px sans-serif';
   ctx.fillText('DESCRIPTION', 50, 330);
   ctx.textAlign = 'right';
   ctx.fillText('AMOUNT', 750, 330);
 
-  // Table Row
   ctx.textAlign = 'left';
   ctx.fillStyle = '#1e293b';
   ctx.font = 'bold 18px sans-serif';
-  ctx.fillText(`${user.plan || 'Custom'} Subscription`, 50, 370);
+  ctx.fillText(`${user.plan || 'Custom'} Plan`, 50, 370);
   
   ctx.font = '14px sans-serif';
   ctx.fillStyle = '#64748b';
-  ctx.fillText(`Valid from ${formatDate(user.startDate)} to ${formatDate(user.endDate)}`, 50, 395);
+  if (user.startDate && user.endDate) {
+      ctx.fillText(`Valid from ${formatDate(user.startDate)} to ${formatDate(user.endDate)}`, 50, 395);
+  }
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#1e293b';
   ctx.font = 'bold 18px sans-serif';
-  ctx.fillText(formatCurrency(user.amount), 750, 370);
+  ctx.fillText(user.amount ? formatCurrency(user.amount) : '-', 750, 370);
 
-  // Total Line
   ctx.beginPath();
   ctx.moveTo(50, 440);
   ctx.lineTo(750, 440);
   ctx.stroke();
 
-  // Total Amount
   ctx.textAlign = 'right';
   ctx.fillStyle = '#4F46E5';
   ctx.font = 'bold 32px sans-serif';
-  ctx.fillText(formatCurrency(user.amount), 750, 490);
+  ctx.fillText(user.amount ? formatCurrency(user.amount) : '-', 750, 490);
   ctx.fillStyle = '#64748b';
   ctx.font = '16px sans-serif';
   ctx.fillText('Total Paid', 750, 455);
 
-  // Footer
   ctx.textAlign = 'center';
   ctx.fillStyle = '#94a3b8';
   ctx.font = '14px sans-serif';
   ctx.fillText('Thank you for choosing Inspired Analyst!', 400, 560);
 
-  // Download
   const link = document.createElement('a');
-  link.download = `Invoice-${user.username ? user.username.replace(/\s+/g, '_') : 'User'}.png`;
+  link.download = `Invoice.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
 };
@@ -220,58 +211,90 @@ const LoginScreen = ({ onLogin }) => {
   );
 };
 
-const UserDetailsModal = ({ user, onClose, onRenew, onDelete }) => {
+const UserDetailsModal = ({ user, onClose, onRenew, onDelete, isDefault }) => {
   if (!user) return null;
   const { status, days, color, icon } = getStatus(user.endDate);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
-        <div className={`p-6 pb-8 ${status === 'Active' ? 'bg-green-50' : status === 'Expired' ? 'bg-red-50' : 'bg-amber-50'} relative`}>
+        
+        {/* Header */}
+        <div className={`p-6 pb-8 ${isDefault ? (status === 'Active' ? 'bg-green-50' : status === 'Expired' ? 'bg-red-50' : 'bg-amber-50') : 'bg-indigo-50'} relative`}>
            <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-white/50 p-1 rounded-full"><X size={20}/></button>
+           
            <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-2xl font-bold shadow-sm mb-3 text-slate-700">
-                {user.username ? user.username.charAt(0).toUpperCase() : 'U'}
+                {(user.username || Object.values(user)[1] || 'U').charAt(0).toUpperCase()}
               </div>
-              <h2 className="text-xl font-bold text-slate-800">{user.username}</h2>
-              <p className="text-sm text-slate-500 mb-2">{user.discordId}</p>
-              <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-white ${color}`}>
-                  {icon} {status} ({days} days left)
-              </span>
+              <h2 className="text-xl font-bold text-slate-800">{user.username || Object.values(user)[1]}</h2>
+              
+              {isDefault && (
+                <>
+                  <p className="text-sm text-slate-500 mb-2">{user.discordId}</p>
+                  <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-white ${color}`}>
+                      {icon} {status} ({days} days left)
+                  </span>
+                </>
+              )}
            </div>
         </div>
+
+        {/* Details Body */}
         <div className="p-6 space-y-4">
-           <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                 <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1"><Gem size={12}/> Plan</div>
-                 <div className="font-semibold text-slate-800">{user.plan || 'Custom'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                 <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1"><CreditCard size={12}/> Amount</div>
-                 <div className="font-semibold text-slate-800">{formatCurrency(user.amount)}</div>
-              </div>
-           </div>
-           <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                 <span className="text-sm text-slate-500 flex items-center gap-2"><Calendar size={14}/> Start Date</span>
-                 <span className="text-sm font-medium text-slate-800">{formatDate(user.startDate)}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                 <span className="text-sm text-slate-500 flex items-center gap-2"><Clock size={14}/> End Date</span>
-                 <span className={`text-sm font-bold ${status === 'Expired' ? 'text-red-600' : 'text-slate-800'}`}>{formatDate(user.endDate)}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                 <span className="text-sm text-slate-500 flex items-center gap-2"><Hash size={14}/> TxID</span>
-                 <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-600">{user.txid || 'N/A'}</span>
-              </div>
-           </div>
+           {/* Only show strict details for Default sheets */}
+           {isDefault ? (
+             <>
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                     <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1"><Gem size={12}/> Plan</div>
+                     <div className="font-semibold text-slate-800">{user.plan}</div>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                     <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1"><CreditCard size={12}/> Amount</div>
+                     <div className="font-semibold text-slate-800">{formatCurrency(user.amount)}</div>
+                  </div>
+               </div>
+               <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                     <span className="text-sm text-slate-500 flex items-center gap-2"><Calendar size={14}/> Start Date</span>
+                     <span className="text-sm font-medium text-slate-800">{formatDate(user.startDate)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                     <span className="text-sm text-slate-500 flex items-center gap-2"><Clock size={14}/> End Date</span>
+                     <span className={`text-sm font-bold ${status === 'Expired' ? 'text-red-600' : 'text-slate-800'}`}>{formatDate(user.endDate)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                     <span className="text-sm text-slate-500 flex items-center gap-2"><Hash size={14}/> TxID</span>
+                     <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-600">{user.txid || 'N/A'}</span>
+                  </div>
+               </div>
+             </>
+           ) : (
+             // Custom Sheet Details
+             <div className="space-y-3">
+                {Object.entries(user).map(([key, val]) => {
+                  if(key === 'id') return null;
+                  return (
+                    <div key={key} className="flex justify-between items-center py-2 border-b border-slate-100">
+                       <span className="text-sm text-slate-500 font-medium capitalize">{key}</span>
+                       <span className="text-sm font-bold text-slate-800">{val}</span>
+                    </div>
+                  )
+                })}
+             </div>
+           )}
+
+           {/* Actions */}
            <div className="flex flex-col gap-2 pt-2">
               <button onClick={() => downloadInvoicePNG(user)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 transition-all">
                  <Download size={18}/> Download Invoice (PNG)
               </button>
               <div className="flex gap-2">
-                 <button onClick={() => onRenew(user.id)} className="flex-1 py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl font-semibold transition-colors">Renew (+1M)</button>
-                 <button onClick={() => onDelete(user.id)} className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-semibold transition-colors">Delete</button>
+                 {isDefault && (
+                   <button onClick={() => onRenew(user.id)} className="flex-1 py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl font-semibold transition-colors">Renew (+1M)</button>
+                 )}
+                 <button onClick={() => onDelete(user.id)} className={`flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-semibold transition-colors ${!isDefault ? 'w-full' : ''}`}>Delete</button>
               </div>
            </div>
         </div>
@@ -303,7 +326,7 @@ export default function App() {
   
   const [newUser, setNewUser] = useState({});
   const [defaultUserForm, setDefaultUserForm] = useState({ 
-    username: '', discordId: '', txid: '', plan: 'Premium', amount: 20, startDate: '', months: 1 
+    discordId: '', txid: '', plan: 'Premium', amount: 20, startDate: '', months: 1 
   });
 
   const [newSheetName, setNewSheetName] = useState('');
@@ -321,14 +344,13 @@ export default function App() {
   useEffect(() => {
     let interval;
     if (isAuthenticated) {
-      fetchSheetsList(); // Fetch available sheets on load
+      fetchSheetsList(); 
       fetchData(); 
       interval = setInterval(() => { fetchData(true); }, 15000);
     }
     return () => clearInterval(interval);
   }, [isAuthenticated, activeSheet]);
 
-  // Fetch List of Sheets from Backend
   const fetchSheetsList = async () => {
     if (GOOGLE_API_URL && GOOGLE_API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
         try {
@@ -380,8 +402,9 @@ export default function App() {
             headers = ['ID', 'Tier', 'Username', 'Discord ID', 'Start Date', 'End Date', 'TxID', 'Amount'];
             keys = ['id', 'plan', 'username', 'discordId', 'startDate', 'endDate', 'txid', 'amount'];
         } else {
-            headers = ['ID', ...sheetConfig.columns, 'Start Date', 'End Date'];
-            keys = ['id', ...sheetConfig.columns, 'startDate', 'endDate'];
+            // For Custom Sheet: ONLY send custom columns, NO DATES
+            headers = ['ID', ...sheetConfig.columns];
+            keys = ['id', ...sheetConfig.columns];
         }
 
         try {
@@ -419,24 +442,20 @@ export default function App() {
 
   const handleAddUser = (e) => {
     e.preventDefault();
-    
-    const start = new Date(sheetConfig.type === 'default' ? defaultUserForm.startDate : newUser.startDate);
-    const months = parseInt(sheetConfig.type === 'default' ? defaultUserForm.months : newUser.months || 1);
-    const end = new Date(start); 
-    end.setMonth(end.getMonth() + months);
-    
-    const formData = sheetConfig.type === 'default' ? defaultUserForm : newUser;
-    
-    // Auto-map username for default sheets
-    if (sheetConfig.type === 'default') {
-        formData.username = formData.discordId; 
-    }
+    let userObj = { id: Math.random().toString(36).substr(2, 9) };
 
-    const userObj = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...formData,
-      endDate: end.toISOString().split('T')[0]
-    };
+    if (sheetConfig.type === 'default') {
+        const start = new Date(defaultUserForm.startDate);
+        const months = parseInt(defaultUserForm.months);
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + months);
+        
+        const finalForm = { ...defaultUserForm, username: defaultUserForm.discordId };
+        userObj = { ...userObj, ...finalForm, endDate: end.toISOString().split('T')[0] };
+    } else {
+        // Custom Sheet - Direct data mapping, no dates
+        userObj = { ...userObj, ...newUser };
+    }
 
     saveData([...users, userObj]);
     setShowAddModal(false);
@@ -474,6 +493,7 @@ export default function App() {
         columns: newSheetType === 'custom' ? customColumns.filter(c => c.trim() !== '') : []
       };
       localStorage.setItem(`sheet_config_${newSheetName}`, JSON.stringify(config));
+      // For backend awareness, we can just save an empty list to init the sheet
       setActiveSheet(newSheetName);
       setShowNewSheetModal(false);
       setNewSheetName('');
@@ -489,7 +509,7 @@ export default function App() {
   const processedUsers = useMemo(() => {
     let data = users;
     if (searchQuery) data = data.filter(u => Object.values(u).some(val => String(val).toLowerCase().includes(searchQuery.toLowerCase())));
-    if (filter !== 'All') {
+    if (filter !== 'All' && sheetConfig.type === 'default') {
       data = data.filter(u => {
         const status = getStatus(u.endDate).status;
         if (filter === 'Active') return status === 'Active';
@@ -498,8 +518,12 @@ export default function App() {
         return true;
       });
     }
-    return data.sort((a, b) => getStatus(a.endDate).days - getStatus(b.endDate).days);
-  }, [users, searchQuery, filter]);
+    // Only sort by date if default sheet
+    if (sheetConfig.type === 'default') {
+        return data.sort((a, b) => getStatus(a.endDate).days - getStatus(b.endDate).days);
+    }
+    return data;
+  }, [users, searchQuery, filter, sheetConfig.type]);
 
   const expiringCount = users.filter(u => getStatus(u.endDate).status === 'Expiring Soon').length;
 
@@ -547,7 +571,7 @@ export default function App() {
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 border-b text-xs uppercase text-slate-500 font-semibold">
                     <tr>
-                      {sheetConfig.type === 'default' ? <><th className="px-6 py-4">Username</th><th className="px-6 py-4">End Date</th><th className="px-6 py-4">Status</th></> : <>{sheetConfig.columns.map((col, idx) => <th key={idx} className="px-6 py-4">{col}</th>)}<th className="px-6 py-4">End Date</th><th className="px-6 py-4">Status</th></>}
+                      {sheetConfig.type === 'default' ? <><th className="px-6 py-4">Username</th><th className="px-6 py-4">End Date</th><th className="px-6 py-4">Status</th></> : <>{sheetConfig.columns.map((col, idx) => <th key={idx} className="px-6 py-4">{col}</th>)}</>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -555,8 +579,7 @@ export default function App() {
                       const { status, days, color, icon } = getStatus(user.endDate);
                       return (
                         <tr key={user.id} onClick={() => setSelectedUser(user)} className="hover:bg-slate-50 transition-colors cursor-pointer group">
-                          {sheetConfig.type === 'default' ? <><td className="px-6 py-4"><p className="font-bold text-slate-800">{user.username}</p><p className="text-xs text-slate-400">{user.discordId}</p></td><td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td></> : <>{sheetConfig.columns.map((col, idx) => <td key={idx} className="px-6 py-4 text-sm font-medium text-slate-700">{user[col] || '-'}</td>)}<td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td></>}
-                          <td className="px-6 py-4"><div className={`flex items-center gap-1.5 px-3 py-1 rounded-full w-fit text-xs font-bold border ${color}`}>{icon} {status} ({days}d)</div></td>
+                          {sheetConfig.type === 'default' ? <><td className="px-6 py-4"><p className="font-bold text-slate-800">{user.username}</p><p className="text-xs text-slate-400">{user.discordId}</p></td><td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td><td className="px-6 py-4"><div className={`flex items-center gap-1.5 px-3 py-1 rounded-full w-fit text-xs font-bold border ${color}`}>{icon} {status} ({days}d)</div></td></> : <>{sheetConfig.columns.map((col, idx) => <td key={idx} className="px-6 py-4 text-sm font-medium text-slate-700">{user[col] || '-'}</td>)}</>}
                         </tr>
                       )
                     })}
@@ -564,7 +587,7 @@ export default function App() {
                 </table>
             </div>
         )}
-        <div className="md:hidden space-y-4">{processedUsers.map(user => { const { status, days, color, icon } = getStatus(user.endDate); return (<div key={user.id} onClick={() => setSelectedUser(user)} className="bg-white p-4 rounded-xl shadow-sm border relative active:scale-95 transition-transform"><div className={`absolute top-4 right-4 flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${color}`}>{icon} {days} Days Left</div><div className="mb-3"><h3 className="font-bold text-lg text-slate-800">{sheetConfig.type === 'default' ? user.username : user[sheetConfig.columns[0]]}</h3><p className="text-sm text-slate-500">{sheetConfig.type === 'default' ? user.discordId : (sheetConfig.columns[1] ? user[sheetConfig.columns[1]] : '')}</p></div><div className="text-sm text-slate-500 font-medium">Expires: {formatDate(user.endDate)}</div></div>) })}</div>
+        <div className="md:hidden space-y-4">{processedUsers.map(user => { const { status, days, color, icon } = getStatus(user.endDate); return (<div key={user.id} onClick={() => setSelectedUser(user)} className="bg-white p-4 rounded-xl shadow-sm border relative active:scale-95 transition-transform">{sheetConfig.type === 'default' && <div className={`absolute top-4 right-4 flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${color}`}>{icon} {days} Days Left</div>}<div className="mb-3"><h3 className="font-bold text-lg text-slate-800">{sheetConfig.type === 'default' ? user.username : user[sheetConfig.columns[0]]}</h3><p className="text-sm text-slate-500">{sheetConfig.type === 'default' ? user.discordId : (sheetConfig.columns[1] ? user[sheetConfig.columns[1]] : '')}</p></div>{sheetConfig.type === 'default' && <div className="text-sm text-slate-500 font-medium">Expires: {formatDate(user.endDate)}</div>}</div>) })}</div>
       </div>
 
       {showAddModal && (
@@ -581,7 +604,7 @@ export default function App() {
                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Start Date</label><input required type="date" className="w-full p-2 border rounded" value={defaultUserForm.startDate} onChange={e=>setDefaultUserForm({...defaultUserForm, startDate: e.target.value})}/></div>
                    </>
                  ) : (
-                   <>{sheetConfig.columns.map((c,i)=><div key={i}><label className="block text-sm font-medium text-slate-700 mb-1">{c}</label><input required className="w-full p-2 border rounded" value={newUser[c]||''} onChange={e=>setNewUser({...newUser, [c]: e.target.value})}/></div>)}<div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-dashed"><div><label className="block text-sm font-medium text-slate-700 mb-1">Months</label><input type="number" min="1" className="w-full p-2 border rounded" value={newUser.months||1} onChange={e=>setNewUser({...newUser, months: e.target.value})}/></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Start Date</label><input required type="date" className="w-full p-2 border rounded" value={newUser.startDate||''} onChange={e=>setNewUser({...newUser, startDate: e.target.value})}/></div></div></>
+                   <>{sheetConfig.columns.map((c,i)=><div key={i}><label className="block text-sm font-medium text-slate-700 mb-1">{c}</label><input required className="w-full p-2 border rounded" value={newUser[c]||''} onChange={e=>setNewUser({...newUser, [c]: e.target.value})}/></div>)}</>
                  )}
                  <div className="flex gap-2 pt-4"><button type="button" onClick={()=>setShowAddModal(false)} className="flex-1 py-2.5 bg-slate-100 rounded-lg">Cancel</button><button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-bold">Add User</button></div>
               </form>
@@ -603,8 +626,7 @@ export default function App() {
         </div>
       )}
 
-      <UserDetailsModal user={selectedUser} onClose={() => setSelectedUser(null)} onRenew={renewSubscription} onDelete={deleteUser}/>
+      <UserDetailsModal user={selectedUser} onClose={() => setSelectedUser(null)} onRenew={renewSubscription} onDelete={deleteUser} isDefault={sheetConfig.type === 'default'}/>
     </div>
   );
 }
-
