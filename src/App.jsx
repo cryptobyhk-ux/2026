@@ -27,12 +27,13 @@ import {
   Hash,
   Clock,
   Cloud,
-  CloudOff
+  CloudOff,
+  Loader2
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
 // IMPORTANT: Yahan apna Google Web App URL paste karein
-const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycby8g2Xe4aH20gRTb5soA_bSr3Wyj4t8TuufqjaNzVRJaRnoOyzMqBuzllguw6J488lJ/exec"; 
+const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyfaAPBpM8ComzSzjrSFPJq7myXxddHGQkV83JkPZKS24RNUYv9BaJzNYTYf4SrXas8Aw/exec"; 
 
 // --- CONSTANTS ---
 const PLAN_PRICES = {
@@ -56,34 +57,22 @@ const formatDate = (dateStr) => {
   return isNaN(date) ? dateStr : date.toLocaleDateString('en-GB'); 
 };
 
-// IMPROVED DATE PARSER
 const parseDate = (input) => {
   if (!input) return new Date();
-  
-  // If it's already a full ISO string from DB (e.g. 2025-12-25T00:00:00.000Z)
-  if (typeof input === 'string' && input.includes('T')) {
-      return new Date(input);
-  }
-
-  // Handle YYYY-MM-DD (e.g. 2025-12-25)
   const parts = input.split(/[-/]/);
   if (parts[0].length === 4) {
     return new Date(parts[0], parts[1] - 1, parts[2]);
   }
-  // Handle DD/MM/YYYY (e.g. 25/12/2025) - unlikely from input type="date" but good for safety
   return new Date(parts[2], parts[1] - 1, parts[0]);
 };
 
-// IMPROVED STATUS & DAYS CALCULATION
 const getStatus = (endDateStr) => {
   if (!endDateStr) return { status: 'Active', days: 99, color: 'text-green-600 bg-green-50', icon: <CheckCircle size={16}/> };
   
   const end = parseDate(endDateStr);
   const now = new Date();
-  
-  // Reset time part to midnight for accurate day calculation
-  end.setHours(0,0,0,0);
   now.setHours(0,0,0,0);
+  end.setHours(0,0,0,0);
   
   const diffTime = end.getTime() - now.getTime();
   const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -197,34 +186,6 @@ const downloadInvoicePNG = (user) => {
   link.click();
 };
 
-// Mock Data Generator
-const generateMockData = () => {
-  return Array.from({ length: 5 }).map((_, i) => {
-    const plan = ['Premium', 'Platinum', 'Diamond'][i % 3];
-    const now = new Date();
-    
-    // Generate End Date relative to now
-    const offsetDays = (i - 2) * 5; 
-    const endDate = new Date(now);
-    endDate.setDate(now.getDate() + offsetDays);
-    
-    // Set Start Date to 1 Month BEFORE the End Date
-    const startDate = new Date(endDate);
-    startDate.setMonth(startDate.getMonth() - 1);
-
-    return {
-      id: Math.random().toString(36).substr(2, 9),
-      username: `User ${i + 1}`,
-      discordId: `user${i}#1234`,
-      txid: `TX${Math.floor(Math.random() * 100000)}`,
-      plan: plan,
-      amount: PLAN_PRICES[plan],
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0], 
-    };
-  });
-};
-
 // --- COMPONENTS ---
 
 const LoginScreen = ({ onLogin }) => {
@@ -259,7 +220,6 @@ const LoginScreen = ({ onLogin }) => {
   );
 };
 
-// New User Details Card Modal
 const UserDetailsModal = ({ user, onClose, onRenew, onDelete }) => {
   if (!user) return null;
   const { status, days, color, icon } = getStatus(user.endDate);
@@ -267,11 +227,8 @@ const UserDetailsModal = ({ user, onClose, onRenew, onDelete }) => {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
-        
-        {/* Header with Status Color */}
         <div className={`p-6 pb-8 ${status === 'Active' ? 'bg-green-50' : status === 'Expired' ? 'bg-red-50' : 'bg-amber-50'} relative`}>
            <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-white/50 p-1 rounded-full"><X size={20}/></button>
-           
            <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-2xl font-bold shadow-sm mb-3 text-slate-700">
                 {user.username ? user.username.charAt(0).toUpperCase() : 'U'}
@@ -283,24 +240,17 @@ const UserDetailsModal = ({ user, onClose, onRenew, onDelete }) => {
               </span>
            </div>
         </div>
-
-        {/* Details Body */}
         <div className="p-6 space-y-4">
            <div className="grid grid-cols-2 gap-4">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                 <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1">
-                    <Gem size={12}/> Plan
-                 </div>
+                 <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1"><Gem size={12}/> Plan</div>
                  <div className="font-semibold text-slate-800">{user.plan || 'Custom'}</div>
               </div>
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                 <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1">
-                    <CreditCard size={12}/> Amount
-                 </div>
+                 <div className="flex items-center gap-2 text-xs text-slate-400 uppercase font-bold mb-1"><CreditCard size={12}/> Amount</div>
                  <div className="font-semibold text-slate-800">{formatCurrency(user.amount)}</div>
               </div>
            </div>
-
            <div className="space-y-3">
               <div className="flex justify-between items-center py-2 border-b border-slate-100">
                  <span className="text-sm text-slate-500 flex items-center gap-2"><Calendar size={14}/> Start Date</span>
@@ -315,23 +265,16 @@ const UserDetailsModal = ({ user, onClose, onRenew, onDelete }) => {
                  <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-600">{user.txid || 'N/A'}</span>
               </div>
            </div>
-
-           {/* Actions */}
            <div className="flex flex-col gap-2 pt-2">
               <button onClick={() => downloadInvoicePNG(user)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 transition-all">
                  <Download size={18}/> Download Invoice (PNG)
               </button>
               <div className="flex gap-2">
-                 <button onClick={() => onRenew(user.id)} className="flex-1 py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl font-semibold transition-colors">
-                    Renew (+1M)
-                 </button>
-                 <button onClick={() => onDelete(user.id)} className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-semibold transition-colors">
-                    Delete
-                 </button>
+                 <button onClick={() => onRenew(user.id)} className="flex-1 py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl font-semibold transition-colors">Renew (+1M)</button>
+                 <button onClick={() => onDelete(user.id)} className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-semibold transition-colors">Delete</button>
               </div>
            </div>
         </div>
-
       </div>
     </div>
   );
@@ -344,8 +287,8 @@ export default function App() {
   const [activeSheet, setActiveSheet] = useState('Dec 2025');
   const [sheetsList, setSheetsList] = useState(['Dec 2025']);
   const [sheetMenuOpen, setSheetMenuOpen] = useState(false);
-  
   const [sheetConfig, setSheetConfig] = useState({ type: 'default', columns: [] });
+  
   const [users, setUsers] = useState([]);
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false); 
@@ -369,36 +312,42 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    const auth = localStorage.getItem('isAuth');
-    if (auth === 'true') {
+    if (localStorage.getItem('isAuth') === 'true') {
       setIsAuthenticated(true);
       fetchData();
     }
   }, []);
 
-  // --- CLOUD SYNC LOGIC ---
   useEffect(() => {
     let interval;
     if (isAuthenticated) {
-      fetchData(); // Initial
-      interval = setInterval(() => {
-        fetchData(true); // Poll Cloud every 15s
-      }, 15000);
+      fetchSheetsList(); // Fetch available sheets on load
+      fetchData(); 
+      interval = setInterval(() => { fetchData(true); }, 15000);
     }
     return () => clearInterval(interval);
   }, [isAuthenticated, activeSheet]);
+
+  // Fetch List of Sheets from Backend
+  const fetchSheetsList = async () => {
+    if (GOOGLE_API_URL && GOOGLE_API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
+        try {
+            const response = await fetch(`${GOOGLE_API_URL}?action=getSheets&t=${Date.now()}`);
+            const data = await response.json();
+            if (data.sheets && Array.isArray(data.sheets)) {
+                setSheetsList(data.sheets);
+            }
+        } catch (e) { console.error("Sheet List Fetch Failed", e); }
+    }
+  };
 
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
     if (silent) setIsSyncing(true);
     
-    // Load config
     const configStr = localStorage.getItem(`sheet_config_${activeSheet}`);
-    if (configStr) {
-      setSheetConfig(JSON.parse(configStr));
-    } else {
-      setSheetConfig({ type: 'default', columns: [] });
-    }
+    if (configStr) setSheetConfig(JSON.parse(configStr));
+    else setSheetConfig({ type: 'default', columns: [] });
 
     if (GOOGLE_API_URL && GOOGLE_API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
       try {
@@ -412,25 +361,16 @@ export default function App() {
         setIsCloudConnected(false);
       }
     } else {
-      // Setup Mode
-      setIsCloudConnected(true); // Always show connected in preview
-      if(!silent) {
-        if(activeSheet === 'Dec 2025' && !GOOGLE_API_URL.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
-           setUsers(generateMockData());
-        } else {
-           setUsers([]);
-        }
-      }
+      setIsCloudConnected(true); 
+      if(!silent) setUsers([]); 
     }
     if (!silent) setLoading(false);
     if (silent) setIsSyncing(false);
   };
 
   const saveData = async (newUsersList) => {
-    // Optimistic UI Update
     setUsers(newUsersList);
     
-    // Send to Cloud
     if (GOOGLE_API_URL && GOOGLE_API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
         setIsSyncing(true);
         let headers = [];
@@ -482,7 +422,7 @@ export default function App() {
     
     const start = new Date(sheetConfig.type === 'default' ? defaultUserForm.startDate : newUser.startDate);
     const months = parseInt(sheetConfig.type === 'default' ? defaultUserForm.months : newUser.months || 1);
-    const end = new Date(start);
+    const end = new Date(start); 
     end.setMonth(end.getMonth() + months);
     
     const formData = sheetConfig.type === 'default' ? defaultUserForm : newUser;
@@ -518,7 +458,7 @@ export default function App() {
   };
 
   const deleteUser = (userId) => {
-    if(confirm('Are you sure you want to delete this user?')) {
+    if(confirm('Are you sure?')) {
       saveData(users.filter(u => u.id !== userId));
       setSelectedUser(null); 
     }
@@ -542,34 +482,13 @@ export default function App() {
     }
   };
 
-  const updateCustomColumn = (index, value) => {
-    const newCols = [...customColumns];
-    newCols[index] = value;
-    setCustomColumns(newCols);
-  };
-
-  const addCustomColumnField = () => {
-    if (customColumns.length < 5) {
-      setCustomColumns([...customColumns, '']);
-    }
-  };
-
-  const removeCustomColumnField = (index) => {
-    const newCols = [...customColumns];
-    newCols.splice(index, 1);
-    setCustomColumns(newCols);
-  };
+  const updateCustomColumn = (index, value) => { const c = [...customColumns]; c[index] = value; setCustomColumns(c); };
+  const addCustomColumnField = () => { if (customColumns.length < 5) setCustomColumns([...customColumns, '']); };
+  const removeCustomColumnField = (index) => { const c = [...customColumns]; c.splice(index, 1); setCustomColumns(c); };
 
   const processedUsers = useMemo(() => {
     let data = users;
-    if (searchQuery) {
-      const lower = searchQuery.toLowerCase();
-      data = data.filter(u => 
-        Object.values(u).some(val => 
-          String(val).toLowerCase().includes(lower)
-        )
-      );
-    }
+    if (searchQuery) data = data.filter(u => Object.values(u).some(val => String(val).toLowerCase().includes(searchQuery.toLowerCase())));
     if (filter !== 'All') {
       data = data.filter(u => {
         const status = getStatus(u.endDate).status;
@@ -579,11 +498,7 @@ export default function App() {
         return true;
       });
     }
-    return data.sort((a, b) => {
-        const daysA = getStatus(a.endDate).days;
-        const daysB = getStatus(b.endDate).days;
-        return daysA - daysB; 
-    });
+    return data.sort((a, b) => getStatus(a.endDate).days - getStatus(b.endDate).days);
   }, [users, searchQuery, filter]);
 
   const expiringCount = users.filter(u => getStatus(u.endDate).status === 'Expiring Soon').length;
@@ -592,160 +507,56 @@ export default function App() {
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-800 font-sans pb-20 md:pb-0">
-      
-      {/* HEADER */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="bg-indigo-600 text-white p-2 rounded-lg hidden md:block">
-              <LayoutDashboard size={20} />
-            </div>
+            <div className="bg-indigo-600 text-white p-2 rounded-lg hidden md:block"><LayoutDashboard size={20} /></div>
             <div className="flex flex-col">
-              <h1 className="font-bold text-xl text-slate-800 tracking-tight flex items-center gap-2">
-                Inspired Analyst
-                {isCloudConnected ? (
-                  <span className={`flex items-center gap-1 bg-green-50 text-green-600 text-[10px] px-2 py-0.5 rounded-full border border-green-200 uppercase tracking-wide`}>
-                    <Cloud size={10} /> 
-                    {isSyncing ? 'Syncing...' : 'Online'}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 bg-red-50 text-red-600 text-[10px] px-2 py-0.5 rounded-full border border-red-200 uppercase tracking-wide">
-                    <CloudOff size={10} /> No Backend
-                  </span>
-                )}
+              <h1 className="font-bold text-xl text-slate-800 tracking-tight flex items-center gap-2">Inspired Analyst
+                {isCloudConnected ? <span className="flex items-center gap-1 bg-green-50 text-green-600 text-[10px] px-2 py-0.5 rounded-full border border-green-200 uppercase tracking-wide"><Cloud size={10} /> {isSyncing ? 'Syncing...' : 'Online'}</span> : <span className="flex items-center gap-1 bg-red-50 text-red-600 text-[10px] px-2 py-0.5 rounded-full border border-red-200 uppercase tracking-wide"><CloudOff size={10} /> No Backend</span>}
               </h1>
-              {lastUpdated && (
-                <span className="text-[10px] text-slate-400 font-medium">
-                  Updated: {lastUpdated.toLocaleTimeString()}
-                </span>
-              )}
+              {lastUpdated && <span className="text-[10px] text-slate-400 font-medium">Updated: {lastUpdated.toLocaleTimeString()}</span>}
             </div>
           </div>
-
           <div className="hidden md:flex items-center gap-4">
             <div className="relative">
-               <button 
-                 onClick={() => setSheetMenuOpen(!sheetMenuOpen)}
-                 className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-               >
-                 <FileSpreadsheet size={16} className="text-green-600"/>
-                 {activeSheet}
-                 <ChevronDown size={14} className={`transition-transform duration-200 ${sheetMenuOpen ? 'rotate-180' : ''}`}/>
-               </button>
-               {sheetMenuOpen && (
-                 <>
-                   <div className="fixed inset-0 z-40" onClick={() => setSheetMenuOpen(false)}></div>
-                   <div className="absolute top-full mt-2 w-48 bg-white shadow-xl rounded-lg p-2 border z-50 animate-in fade-in zoom-in-95 duration-100">
-                     {sheetsList.map(s => (
-                       <button key={s} onClick={() => { setActiveSheet(s); setSheetMenuOpen(false); }} className={`w-full text-left p-2 hover:bg-slate-50 cursor-pointer rounded text-sm ${activeSheet === s ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-slate-700'}`}>{s}</button>
-                     ))}
-                     <div className="border-t my-1"></div>
-                     <button onClick={() => { setShowNewSheetModal(true); setSheetMenuOpen(false); }} className="w-full text-left p-2 text-indigo-600 cursor-pointer font-bold text-sm flex items-center gap-2 hover:bg-slate-50 rounded"><Plus size={14}/> New Sheet</button>
-                   </div>
-                 </>
-               )}
+               <button onClick={() => setSheetMenuOpen(!sheetMenuOpen)} className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"><FileSpreadsheet size={16} className="text-green-600"/>{activeSheet}<ChevronDown size={14} className={`transition-transform duration-200 ${sheetMenuOpen ? 'rotate-180' : ''}`}/></button>
+               {sheetMenuOpen && (<><div className="fixed inset-0 z-40" onClick={() => setSheetMenuOpen(false)}></div><div className="absolute top-full mt-2 w-48 bg-white shadow-xl rounded-lg p-2 border z-50 animate-in fade-in zoom-in-95 duration-100">{sheetsList.map(s => (<button key={s} onClick={() => { setActiveSheet(s); setSheetMenuOpen(false); }} className={`w-full text-left p-2 hover:bg-slate-50 cursor-pointer rounded text-sm ${activeSheet === s ? 'bg-indigo-50 text-indigo-600 font-medium' : 'text-slate-700'}`}>{s}</button>))}<div className="border-t my-1"></div><button onClick={() => { setShowNewSheetModal(true); setSheetMenuOpen(false); }} className="w-full text-left p-2 text-indigo-600 cursor-pointer font-bold text-sm flex items-center gap-2 hover:bg-slate-50 rounded"><Plus size={14}/> New Sheet</button></div></>)}
             </div>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search..." 
-                className="pl-10 pr-4 py-2 bg-slate-100 rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-64"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            <button className="relative p-2 hover:bg-slate-100 rounded-full">
-              <Bell size={20} className="text-slate-600"/>
-              {expiringCount > 0 && <span className="absolute top-1 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
-            </button>
+            <div className="relative"><Search className="absolute left-3 top-2.5 text-slate-400" size={18} /><input type="text" placeholder="Search..." className="pl-10 pr-4 py-2 bg-slate-100 rounded-full text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-64" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}/></div>
+            <button className="relative p-2 hover:bg-slate-100 rounded-full"><Bell size={20} className="text-slate-600"/>{expiringCount > 0 && <span className="absolute top-1 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}</button>
             <button onClick={handleLogout} className="text-slate-400 hover:text-red-500"><LogOut size={20}/></button>
           </div>
           <div className="md:hidden flex items-center gap-3"><button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2">{mobileMenuOpen ? <X/> : <Menu/>}</button></div>
         </div>
       </header>
 
-      {/* MOBILE CONTROLS */}
-      <div className={`md:hidden bg-white border-b p-4 space-y-4 ${mobileMenuOpen ? 'block' : 'hidden'}`}>
-         <div className="flex gap-2 overflow-x-auto pb-2">
-            {sheetsList.map(s => <button key={s} onClick={()=>{setActiveSheet(s); setMobileMenuOpen(false)}} className={`whitespace-nowrap px-3 py-1 rounded-full text-sm border ${activeSheet === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-300'}`}>{s}</button>)}
-             <button onClick={() => setShowNewSheetModal(true)} className="whitespace-nowrap px-3 py-1 rounded-full text-sm border border-dashed border-indigo-400 text-indigo-600">+ New</button>
-         </div>
+      <div className="md:hidden bg-white border-b p-4 space-y-4" style={{display: mobileMenuOpen ? 'block' : 'none'}}>
+         <div className="flex gap-2 overflow-x-auto pb-2">{sheetsList.map(s => <button key={s} onClick={()=>{setActiveSheet(s); setMobileMenuOpen(false)}} className={`whitespace-nowrap px-3 py-1 rounded-full text-sm border ${activeSheet === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-300'}`}>{s}</button>)}<button onClick={() => setShowNewSheetModal(true)} className="whitespace-nowrap px-3 py-1 rounded-full text-sm border border-dashed border-indigo-400 text-indigo-600">+ New</button></div>
          <input type="text" placeholder="Search..." className="w-full px-4 py-2 bg-slate-100 rounded-lg text-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}/>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-slate-700 hidden md:block">
-            Subscribers List <span className="text-xs font-normal bg-slate-200 px-2 py-1 rounded ml-2">{sheetConfig.type === 'custom' ? 'Custom Database' : 'Default'}</span>
-          </h2>
-          <div className="flex gap-2 w-full md:w-auto">
-             <button onClick={() => fetchData()} className="p-2 bg-white border rounded-lg text-slate-600 hover:bg-slate-50"><RefreshCw size={20} className={loading ? 'animate-spin' : ''}/></button>
-             <button onClick={() => setShowAddModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"><Plus size={20}/> <span className="font-semibold">Add User</span></button>
-          </div>
+          <h2 className="text-lg font-bold text-slate-700 hidden md:block">Subscribers List <span className="text-xs font-normal bg-slate-200 px-2 py-1 rounded ml-2">{sheetConfig.type === 'custom' ? 'Custom Database' : 'Default'}</span></h2>
+          <div className="flex gap-2 w-full md:w-auto"><button onClick={() => fetchData()} className="p-2 bg-white border rounded-lg text-slate-600 hover:bg-slate-50"><RefreshCw size={20} className={loading || isSyncing ? 'animate-spin' : ''}/></button><button onClick={() => setShowAddModal(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"><Plus size={20}/> <span className="font-semibold">Add User</span></button></div>
         </div>
 
-        {loading ? (
-            <div className="text-center py-20 text-slate-400">Loading data from Google Sheets...</div>
-        ) : processedUsers.length === 0 ? (
-            <div className="text-center py-20 border-2 border-dashed rounded-xl">
-               <Users size={40} className="mx-auto text-slate-300 mb-2"/>
-               <p className="text-slate-400">{isCloudConnected ? "No users found in Sheet." : "Connect Google Backend to see data."}</p>
-            </div>
-        ) : (
+        {loading ? <div className="text-center py-20 text-slate-400">Loading data from Google Sheets...</div> : processedUsers.length === 0 ? <div className="text-center py-20 border-2 border-dashed rounded-xl"><Users size={40} className="mx-auto text-slate-300 mb-2"/><p className="text-slate-400">{isCloudConnected ? "No users found in Sheet." : "Connect Google Backend to see data."}</p></div> : (
             <div className="hidden md:block bg-white rounded-xl shadow-sm border overflow-hidden">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 border-b text-xs uppercase text-slate-500 font-semibold">
                     <tr>
-                      {/* SIMPLIFIED TABLE HEADERS */}
-                      {sheetConfig.type === 'default' ? (
-                        <>
-                          <th className="px-6 py-4">Username</th>
-                          <th className="px-6 py-4">End Date</th>
-                          <th className="px-6 py-4">Status</th>
-                        </>
-                      ) : (
-                        // Custom Columns
-                        <>
-                          {sheetConfig.columns.map((col, idx) => <th key={idx} className="px-6 py-4">{col}</th>)}
-                          <th className="px-6 py-4">End Date</th>
-                          <th className="px-6 py-4">Status</th>
-                        </>
-                      )}
+                      {sheetConfig.type === 'default' ? <><th className="px-6 py-4">Username</th><th className="px-6 py-4">End Date</th><th className="px-6 py-4">Status</th></> : <>{sheetConfig.columns.map((col, idx) => <th key={idx} className="px-6 py-4">{col}</th>)}<th className="px-6 py-4">End Date</th><th className="px-6 py-4">Status</th></>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {processedUsers.map(user => {
                       const { status, days, color, icon } = getStatus(user.endDate);
                       return (
-                        // ROW IS CLICKABLE - OPENS CARD
                         <tr key={user.id} onClick={() => setSelectedUser(user)} className="hover:bg-slate-50 transition-colors cursor-pointer group">
-                          
-                          {/* SIMPLIFIED TABLE DATA */}
-                          {sheetConfig.type === 'default' ? (
-                            <>
-                              <td className="px-6 py-4">
-                                <p className="font-bold text-slate-800">{user.username}</p>
-                                <p className="text-xs text-slate-400">{user.discordId}</p>
-                              </td>
-                              <td className="px-6 py-4 text-sm font-medium text-slate-600">
-                                 {formatDate(user.endDate)}
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              {sheetConfig.columns.map((col, idx) => <td key={idx} className="px-6 py-4 text-sm font-medium text-slate-700">{user[col] || '-'}</td>)}
-                              <td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td>
-                            </>
-                          )}
-
-                          <td className="px-6 py-4">
-                            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full w-fit text-xs font-bold border ${color}`}>
-                               {icon} {status} ({days}d)
-                            </div>
-                          </td>
+                          {sheetConfig.type === 'default' ? <><td className="px-6 py-4"><p className="font-bold text-slate-800">{user.username}</p><p className="text-xs text-slate-400">{user.discordId}</p></td><td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td></> : <>{sheetConfig.columns.map((col, idx) => <td key={idx} className="px-6 py-4 text-sm font-medium text-slate-700">{user[col] || '-'}</td>)}<td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td></>}
+                          <td className="px-6 py-4"><div className={`flex items-center gap-1.5 px-3 py-1 rounded-full w-fit text-xs font-bold border ${color}`}>{icon} {status} ({days}d)</div></td>
                         </tr>
                       )
                     })}
@@ -753,32 +564,9 @@ export default function App() {
                 </table>
             </div>
         )}
-        
-        {/* MOBILE CARD VIEW (Clickable too) */}
-        <div className="md:hidden space-y-4">
-           {processedUsers.map(user => {
-              const { status, days, color, icon } = getStatus(user.endDate);
-              return (
-                <div key={user.id} onClick={() => setSelectedUser(user)} className="bg-white p-4 rounded-xl shadow-sm border relative active:scale-95 transition-transform">
-                   <div className={`absolute top-4 right-4 flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${color}`}>
-                      {icon} {days} Days Left
-                   </div>
-                   <div className="mb-3">
-                     <h3 className="font-bold text-lg text-slate-800">
-                       {sheetConfig.type === 'default' ? user.username : user[sheetConfig.columns[0]]}
-                     </h3>
-                     <p className="text-sm text-slate-500">
-                       {sheetConfig.type === 'default' ? user.discordId : (sheetConfig.columns[1] ? user[sheetConfig.columns[1]] : '')}
-                     </p>
-                   </div>
-                   <div className="text-sm text-slate-500 font-medium">Expires: {formatDate(user.endDate)}</div>
-                </div>
-              )
-           })}
-        </div>
+        <div className="md:hidden space-y-4">{processedUsers.map(user => { const { status, days, color, icon } = getStatus(user.endDate); return (<div key={user.id} onClick={() => setSelectedUser(user)} className="bg-white p-4 rounded-xl shadow-sm border relative active:scale-95 transition-transform"><div className={`absolute top-4 right-4 flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${color}`}>{icon} {days} Days Left</div><div className="mb-3"><h3 className="font-bold text-lg text-slate-800">{sheetConfig.type === 'default' ? user.username : user[sheetConfig.columns[0]]}</h3><p className="text-sm text-slate-500">{sheetConfig.type === 'default' ? user.discordId : (sheetConfig.columns[1] ? user[sheetConfig.columns[1]] : '')}</p></div><div className="text-sm text-slate-500 font-medium">Expires: {formatDate(user.endDate)}</div></div>) })}</div>
       </div>
 
-      {/* Add User Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
            <div className="bg-white rounded-xl p-6 w-full max-w-md animate-in zoom-in duration-200">
@@ -786,7 +574,6 @@ export default function App() {
               <form onSubmit={handleAddUser} className="space-y-4">
                  {sheetConfig.type === 'default' ? (
                    <>
-                     {/* Username Removed - Only Discord ID now */}
                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Discord ID (Username)</label><input required className="w-full p-2 border rounded" value={defaultUserForm.discordId} onChange={e=>setDefaultUserForm({...defaultUserForm, discordId: e.target.value})}/></div>
                      <div><label className="block text-sm font-medium text-slate-700 mb-1">TxID</label><input className="w-full p-2 border rounded" value={defaultUserForm.txid} onChange={e=>setDefaultUserForm({...defaultUserForm, txid: e.target.value})}/></div>
                      <div><label className="block text-sm font-medium text-slate-700 mb-2">Select Plan</label><div className="grid grid-cols-3 gap-2">{['Premium', 'Platinum', 'Diamond'].map((plan) => (<button key={plan} type="button" onClick={() => setDefaultUserForm({ ...defaultUserForm, plan, amount: PLAN_PRICES[plan] })} className={`py-2 px-1 rounded-lg text-sm font-semibold border ${defaultUserForm.plan === plan ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}`}>{plan}</button>))}</div></div>
@@ -802,7 +589,6 @@ export default function App() {
         </div>
       )}
 
-      {/* New Sheet Modal */}
       {showNewSheetModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
            <div className="bg-white rounded-xl p-6 w-full max-w-sm animate-in zoom-in duration-200">
@@ -817,14 +603,7 @@ export default function App() {
         </div>
       )}
 
-      {/* USER DETAILS CARD MODAL */}
-      <UserDetailsModal 
-        user={selectedUser} 
-        onClose={() => setSelectedUser(null)} 
-        onRenew={renewSubscription}
-        onDelete={deleteUser}
-      />
-
+      <UserDetailsModal user={selectedUser} onClose={() => setSelectedUser(null)} onRenew={renewSubscription} onDelete={deleteUser}/>
     </div>
   );
 }
