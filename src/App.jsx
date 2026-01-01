@@ -52,16 +52,41 @@ const formatCurrency = (amount) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  return isNaN(date) ? dateStr : date.toLocaleDateString('en-GB'); 
+  // Try to handle Date object directly if passed
+  if (dateStr instanceof Date) return dateStr.toLocaleDateString('en-GB');
+
+  // Handle ISO string
+  if (typeof dateStr === 'string' && dateStr.includes('T')) {
+     const date = new Date(dateStr);
+     return isNaN(date) ? dateStr : date.toLocaleDateString('en-GB');
+  }
+
+  // Handle DD/MM/YYYY manually to avoid browser confusion
+  const parts = dateStr.split(/[-/]/);
+  if (parts.length === 3) {
+      if (parts[0].length === 4) {
+          // YYYY-MM-DD
+          const date = new Date(parts[0], parts[1] - 1, parts[2]);
+           return isNaN(date) ? dateStr : date.toLocaleDateString('en-GB');
+      } else {
+          // DD/MM/YYYY or DD-MM-YYYY
+          // Just return as is if it looks formatted, or parse to verify
+          return dateStr;
+      }
+  }
+  return dateStr;
 };
 
 const parseDate = (input) => {
   if (!input) return new Date();
+  if (input instanceof Date) return input; // If already a date object
+
   const parts = input.split(/[-/]/);
+  // YYYY-MM-DD
   if (parts[0].length === 4) {
     return new Date(parts[0], parts[1] - 1, parts[2]);
   }
+  // DD/MM/YYYY
   return new Date(parts[2], parts[1] - 1, parts[0]);
 };
 
@@ -70,10 +95,12 @@ const getStatus = (endDateStr) => {
   
   const end = parseDate(endDateStr);
   const now = new Date();
+  
+  // Reset time to midnight for accurate day difference
   now.setHours(0,0,0,0);
   end.setHours(0,0,0,0);
   
-  const diffTime = end - now;
+  const diffTime = end.getTime() - now.getTime();
   const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
   if (days < 0) return { status: 'Expired', days, color: 'text-red-600 bg-red-50', icon: <XCircle size={16}/> };
@@ -112,7 +139,6 @@ const downloadInvoicePNG = (user) => {
   ctx.font = 'bold 14px sans-serif';
   ctx.fillText('BILL TO', 50, 180);
   
-  // Handle custom sheet user display
   const name = user.username || (Object.keys(user).find(k => k !== 'id') ? user[Object.keys(user).find(k => k !== 'id')] : 'Valued Customer');
 
   ctx.fillStyle = '#1e293b'; 
@@ -231,7 +257,13 @@ const UserDetailsModal = ({ user, onClose, onRenew, onDelete, isDefault }) => {
               
               {isDefault && (
                 <>
-                  <p className="text-sm text-slate-500 mb-2">{user.discordId}</p>
+                  <div className="flex flex-col items-center">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider mb-1 ${
+                        user.plan === 'Diamond' ? 'bg-cyan-100 text-cyan-700' :
+                        user.plan === 'Platinum' ? 'bg-slate-100 text-slate-700' : 'bg-orange-100 text-orange-700'
+                    }`}>{user.plan}</span>
+                    <p className="text-sm text-slate-500 mb-2">{user.discordId}</p>
+                  </div>
                   <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-white ${color}`}>
                       {icon} {status} ({days} days left)
                   </span>
@@ -242,7 +274,6 @@ const UserDetailsModal = ({ user, onClose, onRenew, onDelete, isDefault }) => {
 
         {/* Details Body */}
         <div className="p-6 space-y-4">
-           {/* Only show strict details for Default sheets */}
            {isDefault ? (
              <>
                <div className="grid grid-cols-2 gap-4">
@@ -271,7 +302,6 @@ const UserDetailsModal = ({ user, onClose, onRenew, onDelete, isDefault }) => {
                </div>
              </>
            ) : (
-             // Custom Sheet Details
              <div className="space-y-3">
                 {Object.entries(user).map(([key, val]) => {
                   if(key === 'id') return null;
@@ -325,8 +355,9 @@ export default function App() {
   const [selectedUser, setSelectedUser] = useState(null);
   
   const [newUser, setNewUser] = useState({});
+  // Updated default form to include endDate directly
   const [defaultUserForm, setDefaultUserForm] = useState({ 
-    discordId: '', txid: '', plan: 'Premium', amount: 20, startDate: '', months: 1 
+    discordId: '', txid: '', plan: 'Premium', amount: 20, startDate: '', endDate: '' 
   });
 
   const [newSheetName, setNewSheetName] = useState('');
@@ -402,7 +433,6 @@ export default function App() {
             headers = ['ID', 'Tier', 'Username', 'Discord ID', 'Start Date', 'End Date', 'TxID', 'Amount'];
             keys = ['id', 'plan', 'username', 'discordId', 'startDate', 'endDate', 'txid', 'amount'];
         } else {
-            // For Custom Sheet: ONLY send custom columns, NO DATES
             headers = ['ID', ...sheetConfig.columns];
             keys = ['id', ...sheetConfig.columns];
         }
@@ -445,28 +475,27 @@ export default function App() {
     let userObj = { id: Math.random().toString(36).substr(2, 9) };
 
     if (sheetConfig.type === 'default') {
-        const start = new Date(defaultUserForm.startDate);
-        const months = parseInt(defaultUserForm.months);
-        const end = new Date(start);
-        end.setMonth(end.getMonth() + months);
-        
         const finalForm = { ...defaultUserForm, username: defaultUserForm.discordId };
-        userObj = { ...userObj, ...finalForm, endDate: end.toISOString().split('T')[0] };
+        // Use the manually selected endDate directly, ensure it's saved as YYYY-MM-DD for consistency
+        userObj = { ...userObj, ...finalForm, endDate: defaultUserForm.endDate };
     } else {
-        // Custom Sheet - Direct data mapping, no dates
         userObj = { ...userObj, ...newUser };
     }
 
     saveData([...users, userObj]);
     setShowAddModal(false);
-    setDefaultUserForm({ username: '', discordId: '', txid: '', plan: 'Premium', amount: 20, startDate: '', months: 1 });
+    setDefaultUserForm({ discordId: '', txid: '', plan: 'Premium', amount: 20, startDate: '', endDate: '' });
     setNewUser({});
   };
 
   const renewSubscription = (userId) => {
     const updatedUsers = users.map(u => {
       if (u.id === userId) {
-        const currentEnd = new Date(u.endDate);
+        // Parse the current end date, increment month
+        let currentEnd = parseDate(u.endDate);
+        // Safety check if date is invalid
+        if(isNaN(currentEnd)) currentEnd = new Date();
+        
         currentEnd.setMonth(currentEnd.getMonth() + 1);
         return { ...u, endDate: currentEnd.toISOString().split('T')[0] };
       }
@@ -493,7 +522,6 @@ export default function App() {
         columns: newSheetType === 'custom' ? customColumns.filter(c => c.trim() !== '') : []
       };
       localStorage.setItem(`sheet_config_${newSheetName}`, JSON.stringify(config));
-      // For backend awareness, we can just save an empty list to init the sheet
       setActiveSheet(newSheetName);
       setShowNewSheetModal(false);
       setNewSheetName('');
@@ -518,7 +546,6 @@ export default function App() {
         return true;
       });
     }
-    // Only sort by date if default sheet
     if (sheetConfig.type === 'default') {
         return data.sort((a, b) => getStatus(a.endDate).days - getStatus(b.endDate).days);
     }
@@ -579,7 +606,24 @@ export default function App() {
                       const { status, days, color, icon } = getStatus(user.endDate);
                       return (
                         <tr key={user.id} onClick={() => setSelectedUser(user)} className="hover:bg-slate-50 transition-colors cursor-pointer group">
-                          {sheetConfig.type === 'default' ? <><td className="px-6 py-4"><p className="font-bold text-slate-800">{user.username}</p><p className="text-xs text-slate-400">{user.discordId}</p></td><td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td><td className="px-6 py-4"><div className={`flex items-center gap-1.5 px-3 py-1 rounded-full w-fit text-xs font-bold border ${color}`}>{icon} {status} ({days}d)</div></td></> : <>{sheetConfig.columns.map((col, idx) => <td key={idx} className="px-6 py-4 text-sm font-medium text-slate-700">{user[col] || '-'}</td>)}</>}
+                          {sheetConfig.type === 'default' ? (
+                            <>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-bold text-slate-800">{user.username}</p>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                    user.plan === 'Diamond' ? 'bg-cyan-100 text-cyan-700' :
+                                    user.plan === 'Platinum' ? 'bg-slate-100 text-slate-700' : 'bg-orange-100 text-orange-700'
+                                  }`}>{user.plan}</span>
+                                </div>
+                                <p className="text-xs text-slate-400">{user.discordId}</p>
+                              </td>
+                              <td className="px-6 py-4 text-sm font-medium text-slate-600">{formatDate(user.endDate)}</td>
+                              <td className="px-6 py-4"><div className={`flex items-center gap-1.5 px-3 py-1 rounded-full w-fit text-xs font-bold border ${color}`}>{icon} {status} ({days}d)</div></td>
+                            </>
+                          ) : (
+                            <>{sheetConfig.columns.map((col, idx) => <td key={idx} className="px-6 py-4 text-sm font-medium text-slate-700">{user[col] || '-'}</td>)}</>
+                          )}
                         </tr>
                       )
                     })}
@@ -600,8 +644,11 @@ export default function App() {
                      <div><label className="block text-sm font-medium text-slate-700 mb-1">Discord ID (Username)</label><input required className="w-full p-2 border rounded" value={defaultUserForm.discordId} onChange={e=>setDefaultUserForm({...defaultUserForm, discordId: e.target.value})}/></div>
                      <div><label className="block text-sm font-medium text-slate-700 mb-1">TxID</label><input className="w-full p-2 border rounded" value={defaultUserForm.txid} onChange={e=>setDefaultUserForm({...defaultUserForm, txid: e.target.value})}/></div>
                      <div><label className="block text-sm font-medium text-slate-700 mb-2">Select Plan</label><div className="grid grid-cols-3 gap-2">{['Premium', 'Platinum', 'Diamond'].map((plan) => (<button key={plan} type="button" onClick={() => setDefaultUserForm({ ...defaultUserForm, plan, amount: PLAN_PRICES[plan] })} className={`py-2 px-1 rounded-lg text-sm font-semibold border ${defaultUserForm.plan === plan ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}`}>{plan}</button>))}</div></div>
-                     <div className="grid grid-cols-2 gap-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Amount ($)</label><input type="number" className="w-full p-2 border rounded" value={defaultUserForm.amount} onChange={e=>setDefaultUserForm({...defaultUserForm, amount: e.target.value})}/></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Months</label><input type="number" min="1" className="w-full p-2 border rounded" value={defaultUserForm.months} onChange={e=>setDefaultUserForm({...defaultUserForm, months: e.target.value})}/></div></div>
-                     <div><label className="block text-sm font-medium text-slate-700 mb-1">Start Date</label><input required type="date" className="w-full p-2 border rounded" value={defaultUserForm.startDate} onChange={e=>setDefaultUserForm({...defaultUserForm, startDate: e.target.value})}/></div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Amount ($)</label><input type="number" className="w-full p-2 border rounded" value={defaultUserForm.amount} onChange={e=>setDefaultUserForm({...defaultUserForm, amount: e.target.value})}/></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Start Date</label><input required type="date" className="w-full p-2 border rounded" value={defaultUserForm.startDate} onChange={e=>setDefaultUserForm({...defaultUserForm, startDate: e.target.value})}/></div>
+                     </div>
+                     <div><label className="block text-sm font-medium text-slate-700 mb-1">End Date</label><input required type="date" className="w-full p-2 border rounded" value={defaultUserForm.endDate} onChange={e=>setDefaultUserForm({...defaultUserForm, endDate: e.target.value})}/></div>
                    </>
                  ) : (
                    <>{sheetConfig.columns.map((c,i)=><div key={i}><label className="block text-sm font-medium text-slate-700 mb-1">{c}</label><input required className="w-full p-2 border rounded" value={newUser[c]||''} onChange={e=>setNewUser({...newUser, [c]: e.target.value})}/></div>)}</>
