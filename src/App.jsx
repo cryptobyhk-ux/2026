@@ -50,44 +50,35 @@ const formatCurrency = (amount) => {
   }).format(amount || 0);
 };
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '-';
-  // Try to handle Date object directly if passed
-  if (dateStr instanceof Date) return dateStr.toLocaleDateString('en-GB');
-
-  // Handle ISO string
-  if (typeof dateStr === 'string' && dateStr.includes('T')) {
-     const date = new Date(dateStr);
-     return isNaN(date) ? dateStr : date.toLocaleDateString('en-GB');
-  }
-
-  // Handle DD/MM/YYYY manually to avoid browser confusion
-  const parts = dateStr.split(/[-/]/);
-  if (parts.length === 3) {
-      if (parts[0].length === 4) {
-          // YYYY-MM-DD
-          const date = new Date(parts[0], parts[1] - 1, parts[2]);
-           return isNaN(date) ? dateStr : date.toLocaleDateString('en-GB');
-      } else {
-          // DD/MM/YYYY or DD-MM-YYYY
-          // Just return as is if it looks formatted, or parse to verify
-          return dateStr;
-      }
-  }
-  return dateStr;
-};
-
+// Robust Date Parser (Fixes NaN Issue)
 const parseDate = (input) => {
   if (!input) return new Date();
-  if (input instanceof Date) return input; // If already a date object
+  if (input instanceof Date) return input;
 
-  const parts = input.split(/[-/]/);
-  // YYYY-MM-DD
-  if (parts[0].length === 4) {
-    return new Date(parts[0], parts[1] - 1, parts[2]);
+  // 1. Try ISO String / Standard JS Date Parsing
+  const timestamp = Date.parse(input);
+  if (!isNaN(timestamp)) {
+      return new Date(timestamp);
   }
-  // DD/MM/YYYY
-  return new Date(parts[2], parts[1] - 1, parts[0]);
+
+  // 2. Fallback for DD/MM/YYYY or DD-MM-YYYY
+  const parts = String(input).split(/[-/]/);
+  if (parts.length === 3) {
+      // Check if YYYY-MM-DD
+      if (parts[0].length === 4) {
+          return new Date(parts[0], parts[1] - 1, parts[2]);
+      }
+      // Assume DD/MM/YYYY
+      return new Date(parts[2], parts[1] - 1, parts[0]);
+  }
+  
+  return new Date(); // Fail-safe to "Now"
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  const date = parseDate(dateStr); // Use robust parser here too
+  return isNaN(date) ? dateStr : date.toLocaleDateString('en-GB'); 
 };
 
 const getStatus = (endDateStr) => {
@@ -96,7 +87,11 @@ const getStatus = (endDateStr) => {
   const end = parseDate(endDateStr);
   const now = new Date();
   
-  // Reset time to midnight for accurate day difference
+  // Safety Check
+  if (isNaN(end.getTime())) {
+     return { status: 'Error', days: 0, color: 'text-gray-400 bg-gray-100', icon: <AlertTriangle size={16}/> };
+  }
+
   now.setHours(0,0,0,0);
   end.setHours(0,0,0,0);
   
@@ -355,7 +350,6 @@ export default function App() {
   const [selectedUser, setSelectedUser] = useState(null);
   
   const [newUser, setNewUser] = useState({});
-  // Updated default form to include endDate directly
   const [defaultUserForm, setDefaultUserForm] = useState({ 
     discordId: '', txid: '', plan: 'Premium', amount: 20, startDate: '', endDate: '' 
   });
@@ -476,7 +470,6 @@ export default function App() {
 
     if (sheetConfig.type === 'default') {
         const finalForm = { ...defaultUserForm, username: defaultUserForm.discordId };
-        // Use the manually selected endDate directly, ensure it's saved as YYYY-MM-DD for consistency
         userObj = { ...userObj, ...finalForm, endDate: defaultUserForm.endDate };
     } else {
         userObj = { ...userObj, ...newUser };
@@ -491,11 +484,8 @@ export default function App() {
   const renewSubscription = (userId) => {
     const updatedUsers = users.map(u => {
       if (u.id === userId) {
-        // Parse the current end date, increment month
         let currentEnd = parseDate(u.endDate);
-        // Safety check if date is invalid
         if(isNaN(currentEnd)) currentEnd = new Date();
-        
         currentEnd.setMonth(currentEnd.getMonth() + 1);
         return { ...u, endDate: currentEnd.toISOString().split('T')[0] };
       }
@@ -611,7 +601,7 @@ export default function App() {
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-2">
                                   <p className="font-bold text-slate-800">{user.username}</p>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
                                     user.plan === 'Diamond' ? 'bg-cyan-100 text-cyan-700' :
                                     user.plan === 'Platinum' ? 'bg-slate-100 text-slate-700' : 'bg-orange-100 text-orange-700'
                                   }`}>{user.plan}</span>
@@ -631,7 +621,7 @@ export default function App() {
                 </table>
             </div>
         )}
-        <div className="md:hidden space-y-4">{processedUsers.map(user => { const { status, days, color, icon } = getStatus(user.endDate); return (<div key={user.id} onClick={() => setSelectedUser(user)} className="bg-white p-4 rounded-xl shadow-sm border relative active:scale-95 transition-transform">{sheetConfig.type === 'default' && <div className={`absolute top-4 right-4 flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${color}`}>{icon} {days} Days Left</div>}<div className="mb-3"><h3 className="font-bold text-lg text-slate-800">{sheetConfig.type === 'default' ? user.username : user[sheetConfig.columns[0]]}</h3><p className="text-sm text-slate-500">{sheetConfig.type === 'default' ? user.discordId : (sheetConfig.columns[1] ? user[sheetConfig.columns[1]] : '')}</p></div>{sheetConfig.type === 'default' && <div className="text-sm text-slate-500 font-medium">Expires: {formatDate(user.endDate)}</div>}</div>) })}</div>
+        <div className="md:hidden space-y-4">{processedUsers.map(user => { const { status, days, color, icon } = getStatus(user.endDate); return (<div key={user.id} onClick={() => setSelectedUser(user)} className="bg-white p-4 rounded-xl shadow-sm border relative active:scale-95 transition-transform">{sheetConfig.type === 'default' && <div className={`absolute top-4 right-4 flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${color}`}>{icon} {days} Days Left</div>}<div className="mb-3"><div className="flex items-center gap-2"><h3 className="font-bold text-lg text-slate-800">{sheetConfig.type === 'default' ? user.username : user[sheetConfig.columns[0]]}</h3>{sheetConfig.type === 'default' && <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${user.plan === 'Diamond' ? 'bg-cyan-100 text-cyan-700' : user.plan === 'Platinum' ? 'bg-slate-100 text-slate-700' : 'bg-orange-100 text-orange-700'}`}>{user.plan}</span>}</div><p className="text-sm text-slate-500">{sheetConfig.type === 'default' ? user.discordId : (sheetConfig.columns[1] ? user[sheetConfig.columns[1]] : '')}</p></div>{sheetConfig.type === 'default' && <div className="text-sm text-slate-500 font-medium">Expires: {formatDate(user.endDate)}</div>}</div>) })}</div>
       </div>
 
       {showAddModal && (
