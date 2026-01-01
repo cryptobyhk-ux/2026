@@ -32,7 +32,7 @@ import {
 
 // --- CONFIGURATION ---
 // IMPORTANT: Yahan apna Google Web App URL paste karein
-const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbxsqRSq7ljH_B3B2_tSuyE0abLeMwXqs9hGqy1V00g93sRJfwAz7ST6nYuDEAqDqmSlDQ/exec"; 
+const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyUqTpsKy61ePO91ucotXtcbGn91MaQaOZYhhb8QT_6-eMWAtknmkCsHAC2URLaVhckpQ/exec"; 
 
 // --- CONSTANTS ---
 const PLAN_PRICES = {
@@ -667,3 +667,4 @@ export default function App() {
     </div>
   );
 }
+
