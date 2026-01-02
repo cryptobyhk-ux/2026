@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
-const USE_GOOGLE_SHEETS_API = true; 
+const USE_GOOGLE_SHEETS_API = false; 
 const GOOGLE_API_URL = "https://script.google.com/macros/s/AKfycbyUqTpsKy61ePO91ucotXtcbGn91MaQaOZYhhb8QT_6-eMWAtknmkCsHAC2URLaVhckpQ/exec";
 
 // --- HELPER FUNCTIONS ---
@@ -344,3 +344,4 @@ export default function App() {
     </div>
   );
 }
+
